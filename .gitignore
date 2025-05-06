@@ -1,1 +1,4 @@
 tsv_files/*.tsv
+Assets/**
+Results/**
+.DS_Store

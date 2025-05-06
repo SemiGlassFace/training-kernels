@@ -55,6 +55,8 @@ function matching_pursuit(x, stop_type, stop_cond, kernels, x_res=nothing, max_i
 
     stop_type = string(stop_type)
 
+    x_res = CuArray(vec(x_res))
+    
     # Initial conditions
     amp_list = Float64[]
     index_list = Int[]
@@ -101,30 +103,42 @@ function matching_pursuit(x, stop_type, stop_cond, kernels, x_res=nothing, max_i
     return x_res, kernel_list, amp_list, index_list, norm_list
 end
 
-
 @inline function process_kernel(kernel, x_res_flip)
     tmp = similar(x_res_flip, length(x_res_flip) + length(kernel) - 1)
     conv!(tmp, x_res_flip, kernel)
     b_j = argmax(abs.(tmp))
     b_j = b_j[1]
-    a_j = tmp[b_j]
+    CUDA.@allowscalar a_j = tmp[b_j]
     return a_j, b_j
+end
+
+function kernel_process_kernel(result, kernels, x_res_flip, lker, lxres)
+    i = threadIdx().x
+    tmp = similar(x_res_flip, lxres + lker - 1)
+    conv!(tmp, x_res_flip, kernels[i].kernel)
+    b_j = argmax(abs.(tmp))
+    b_j = b_j[1]
+    CUDA.@allowscalar a_j = tmp[b_j]
+    result[i] = (a_j, b_j)
+    return
 end
 
 
 function matching_pursuit_iter(x_res, kernels)
     Ng = length(kernels)  # number of kernels
-    a = CUDA.zeros(Ng)
-    b = CUDA.zeros(Int, Ng)
+    a = zeros(Ng)
+    b = zeros(Int, Ng)
 
     x_res_flip = reverse!(x_res)
 
     # Preallocate results array
-    results = CuArray{Tuple{Float64,Int}}(undef, Ng)  # Assuming YourType is the type of a_j
+    results = Vector{Tuple{Float64,Int}}(undef, Ng)  # Assuming YourType is the type of a_j
     @threads for j in 1:Ng
         # Call the process_kernel function and store the result
         results[j] = process_kernel(kernels[j].kernel, x_res_flip)
     end
+    # @cuda threads=Ng kernel_process_kernel(results, kernelsCuArrayKernels, x_res_flip, length(kernels[1].kernel), length(x_res_flip))
+    # results = vec(results)
 
     # Unpack the results into a and b
     for (j, (a_j, b_j)) in enumerate(results)
@@ -206,7 +220,7 @@ function update_kernels!(index_list, kernel_list, amp_list, kernels, x_res, step
         # If there are any uses for this kernel:
         if !isempty(INDX)
             lKernel = length(kernels[ng].kernel)
-            grad = zeros(lKernel)
+            grad = CUDA.zeros(lKernel)
             amp_norm = 0.0
             for indx in INDX
                 indx1 = index_list[indx]
@@ -246,8 +260,8 @@ function trim_and_expand_kernels!(kernels, threshold, expansion_range)
         nPad = min(floor(Int, 0.1 * Lg), 20)  # padding length
 
         # Update length
-        kernels[ng].kernel = vcat(zeros(nPad), kernels[ng].kernel, zeros(nPad))
-        kernels[ng].gradient = vcat(zeros(nPad), kernels[ng].gradient, zeros(nPad))
+        kernels[ng].kernel = vcat(CUDA.zeros(nPad), kernels[ng].kernel, CUDA.zeros(nPad))
+        kernels[ng].gradient = vcat(CUDA.zeros(nPad), kernels[ng].gradient, CUDA.zeros(nPad))
     end
 
     # Trimming kernels

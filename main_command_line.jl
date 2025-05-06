@@ -10,7 +10,7 @@ It takes several command-line arguments to configure the execution.
 
 # Activate the current environment to ensure the correct dependencies are used
 import Pkg
-Pkg.activate("MyAuditoryKernels")
+Pkg.activate("KernelsEnv")
 
 include(joinpath(@__DIR__, "filter_utils.jl"))  # Load the file containing the filter functions
 include(joinpath(@__DIR__, "mp_utils.jl"))  # Load the file containing the MP functions
@@ -36,7 +36,7 @@ end
 
 
 function initialise_kernels(MPparam)
-    window = DSP.Windows.hamming(MPparam.kernel_size)
+    window = CuArray(DSP.Windows.hamming(MPparam.kernel_size))
     initial_kernels = []
     for _ in 1:MPparam.Ng
         kernel = window .* CUDA.randn(Float64, MPparam.kernel_size) # Generate a random kernel of size (100,)
@@ -119,8 +119,8 @@ function store_figure_and_jld2(kernels, ID, count, MPparam, Filterparam, csv_fil
         # (1): store
         mp_utils.save_to_jld2(ID, count, MPparam, Filterparam, csv_file, kernels)
 
-        # (2): plot
-        mp_utils.arrayPlot(kernels, ID, count)
+        # # (2): plot
+        # mp_utils.arrayPlot(kernels, ID, count)
     end
 end
 
@@ -260,7 +260,7 @@ end
 
 
 # Main loop
-mp_utils.arrayPlot(kernels, ID, count_start)
+# mp_utils.arrayPlot(kernels, ID, count_start)
 run_epochs(MPparam, Filterparam, kernels, csv_file, count_start, filter_flag, normalise_flag)
 
 

@@ -1,7 +1,6 @@
 module filter_utils
 
 using DSP
-using Plots
 using CUDA
 
 export Filterparams, getFIRbandpassfilter, plotFIRresponse
